@@ -1,0 +1,11 @@
+- hosts: nginx
+  roles:
+    - frontend
+
+- hosts: mysql
+  roles:
+    - database
+
+- hosts: apache
+  roles:
+    - backend

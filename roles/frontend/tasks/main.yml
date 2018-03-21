@@ -1,0 +1,36 @@
+---
+# tasks file for frontend
+- name: Update repositories cache and install "nginx" package
+  apt:
+    name: nginx
+    update_cache: yes
+  become: true
+
+- name: Creates nginx cache directory
+  file:
+    path: /var/lib/nginx/cache
+    state: directory
+    owner: www-data
+    group: www-data
+    mode: 0700
+  become: true
+
+- name: Configuration nginx
+  become: true
+  action: template src=templates/wordpress dest=/etc/nginx/sites-available/default
+  tags: common
+  notify:
+    - restart nginx
+
+#- name: Set nginx configuration as proxy
+#  lineinfile:
+#    dest=/etc/nginx/sites-available/default
+#    regexp="(.)+DocumentRoot /var/www/html"
+#    line="DocumentRoot /var/www/wordpress"
+#  notify:
+#    - restart nginx
+#  become: true
+
+#- name: Ensure the hostname entry for master is available for the client.
+#  lineinfile: dest=/etc/hosts regexp="{{ mysql_repl_master }}" line="{{ hostvars[mysql_repl_master].ansible_default_ipv4.address + "   " + mysql_repl_master }}" state=present
+#when: slave|failed and mysql_repl_role == 'slave' and mysql_repl_master is defined

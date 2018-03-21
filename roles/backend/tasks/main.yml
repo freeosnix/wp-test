@@ -1,0 +1,101 @@
+---
+# tasks file for backend
+- name: Update apt cache
+  apt: update_cache=yes cache_valid_time=3600
+  become: true
+
+- name: Install apache2 and mod_php
+  apt: name={{ item }} state=present
+  become: true
+  with_items:
+    - apache2
+    - mysql-client
+    - php-mysql
+    - php
+    - libapache2-mod-php
+    - php-mcrypt
+
+- name: Download wp-cli
+  get_url:
+    url: https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
+    dest: /usr/local/bin/wp
+    mode: 0755
+  become: true
+
+- name: Is WordPress downloaded?
+  stat: path="{{ remote_wordpress_dir }}/index.php"
+  register: wordpress_is_downloaded
+
+- name: Add group "{{ remote_deploy_group }}"
+  become: true
+  group: name="{{ remote_deploy_group }}"
+
+- name: Add user "{{ remote_deploy_user }}", belonging to group "{{ remote_deploy_group }}" and having a home dir of {{ remote_wordpress_dir }}
+  become: true
+  user: name="{{ remote_deploy_user }}" group="{{ remote_deploy_group }}" home={{ remote_wordpress_dir }}
+
+- name: Give ownership of {{ remote_wordpress_dir }} to the wordpress user
+  become: true
+  file: name={{ remote_wordpress_dir }} group="{{ remote_deploy_user }}" owner="{{ remote_deploy_group }}"
+
+- name: Create WordPress directory
+  become: true
+  file: path="{{ remote_wordpress_dir }}"
+        owner="{{ remote_deploy_user }}"
+        group="{{ remote_deploy_group }}"
+        mode=0755
+        state=directory
+  when: wordpress_is_downloaded == False
+
+- name: Download wordpress into "{{ remote_wordpress_dir }}" using wp[-cli] command as the wordpress user
+  become: yes
+  become_user: wordpress
+  command: wp core download --path="{{ remote_wordpress_dir }}"
+  #when: wordpress_is_downloaded == False
+
+- name: Create Wordpress configuration
+  become: yes
+  become_user: wordpress
+  command: wp config create --dbname={{wp_mysql_db}} --dbuser={{wp_mysql_user}} --dbpass={{wp_mysql_password}} --dbhost={{wp_mysql_host}} --locale={{locale}} --path={{ remote_wordpress_dir }}
+   chdir={{ remote_wordpress_dir }} creates={{ remote_wordpress_dir }}/wp-config.php
+
+- name: Update default Apache site
+  become: yes
+  lineinfile:
+    dest=/etc/apache2/sites-enabled/000-default.conf
+    regexp="(.)+DocumentRoot /var/www/html"
+    line="DocumentRoot /var/www/wordpress"
+  notify:
+    - restart apache
+
+- name: Is WordPress installed?
+  command: wp core is-installed --path="{{ remote_wordpress_dir }}"
+  args:
+    chdir: "{{ remote_wordpress_dir }}/"
+  register: wordpress_is_installed
+  ignore_errors: True
+  remote_user: "{{ remote_deploy_user }}"
+
+- name: Install Wordpress
+  become: yes
+  become_user: wordpress
+  command: wp core install
+             --url={{url}}
+             --title={{title}}
+             --admin_user={{admin_user}}
+             --admin_password={{admin_pwd}}
+             --admin_email={{admin_email}}
+             --path={{ root_directory }}
+  when: wordpress_is_installed | failed
+
+- name: Add Wordpress users
+  become: true
+  become_user: wordpress
+  command: "{{ item }}"
+  with_items:
+   - wp user create {{ wp_user1 }} {{ wp_user1_email }} --role=administrator --path={{ root_directory }}
+   - wp user update {{ wp_user1 }} --user_pass="{{ wp_user1_pass }}" --path={{ root_directory }}
+   - wp user create {{ wp_user2 }} {{ wp_user2_email }} --role=editor --path={{ root_directory }}
+   - wp user update {{ wp_user2 }} --user_pass="{{ wp_user2_pass }}" --path={{ root_directory }}
+   - wp user create {{ wp_user3 }} {{ wp_user3_email }} --role=author --path={{ root_directory }}
+   - wp user update {{ wp_user3 }} --user_pass="{{ wp_user3_pass }}" --path={{ root_directory }}

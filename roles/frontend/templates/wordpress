@@ -1,0 +1,23 @@
+upstream wordpress_backend {
+    server ec2-34-245-168-201.eu-west-1.compute.amazonaws.com;
+}
+
+proxy_cache_path /var/lib/nginx/cache levels=1:2 max_size=2g inactive=24h keys_zone=all:10m;
+
+server {
+        listen 80 default_server;
+        listen [::]:80 default_server;
+
+        server_name _;
+
+        location / {
+                if ($http_cookie ~* ".+" ) {
+                        set $do_not_cache 1;
+                }
+                proxy_pass http://wordpress_backend;
+                proxy_cache_bypass $do_not_cache;
+                proxy_cache all;
+                proxy_cache_valid 404 502 503 1m;
+                proxy_cache_valid any 1h;
+        }
+}

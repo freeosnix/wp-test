@@ -1,0 +1,43 @@
+---
+# tasks file for database
+- name: Update apt cache
+  apt: update_cache=yes cache_valid_time=3600
+  become: true
+
+- name: Install mysql-server
+  apt: name={{ item }} state=present
+  become: true
+  with_items:
+    - mysql-server
+    - python-mysqldb
+
+- name: Create wordpress mysql database
+  mysql_db:
+   name: "{{ wp_mysql_db }}"
+   state: present
+  become: true
+
+- name: Create wordpress mysql user
+  mysql_user:
+   login_user: root
+   login_password: ""
+   name: "{{ wp_mysql_user }}"
+   host: "{{ wp_mysql_host }}"
+   password: "{{ wp_mysql_password }}"
+   priv: '*.*:ALL'
+  become: true
+
+- name: Ensure MySQL is configured to bind to the specified address and port
+  ini_file:
+    dest: /etc/mysql/mysql.conf.d/mysqld.cnf
+    section: mysqld
+    option: "{{ item.option }}"
+    value: "{{ item.value }}"
+  register: my_cnf
+  with_items:
+#    - { option: bind-address, value: "{{ mysql_bind_address }}" }
+    - { option: bind-address, value: "0.0.0.0" }
+    - { option: port, value: "{{ mysql_port }}" }
+  notify:
+  - restart mysql
+  become: true
